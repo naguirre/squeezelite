@@ -1,14 +1,14 @@
-/* 
+/*
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
  *      Ralph Irving 2015-2017, ralph_irving@hotmail.com
- *  
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -62,6 +62,12 @@
 #define PA18API   1
 #define OSX       0
 #define WIN       0
+#elif defined (__FreeRTOS__)
+#define LINUX     0
+#define OSX       0
+#define WIN       0
+#define FREEBSD   0
+#define FREERTOS  1
 #else
 #error unknown target
 #endif
@@ -92,6 +98,11 @@
 #define EVENTFD   0
 #define SELFPIPE  0
 #define WINEVENT  1
+#endif
+#if FREERTOS
+#define EVENTFD   0
+#define SELFPIPE  0
+#define WINEVENT  0
 #endif
 
 #if defined(RESAMPLE) || defined(RESAMPLE_MP)
@@ -246,6 +257,16 @@
 #include <signal.h>
 #if SUN
 #include <sys/types.h>
+#include <unistd.h>
+#include <stdbool.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <poll.h>
+#include <dlfcn.h>
+#include <pthread.h>
+#include <signal.h>
 #endif /* SUN */
 
 #define STREAM_THREAD_STACK_SIZE  64 * 1024
@@ -330,6 +351,56 @@ typedef BOOL bool;
 
 #endif
 
+#if FREERTOS
+
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdbool.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+#include <sys/socket.h>
+#include <pthread.h>
+#include <signal.h>
+#include <netdb.h>
+
+
+#define ERROR_WOULDBLOCK EWOULDBLOCK
+
+struct pollfd {
+   int   fd;         /* file descriptor */
+   short events;     /* requested events */
+   short revents;    /* returned events */
+};
+enum {
+    POLLIN = 1,
+    POLLPRI,
+    POLLOUT,
+    POLLRDHUP,
+    POLLERR,
+    POLLHUP,
+};
+
+#define mutex_type pthread_mutex_t
+#define mutex_create(m) pthread_mutex_init(&m, NULL)
+#define mutex_create_p(m) pthread_mutexattr_t attr; pthread_mutexattr_init(&attr); pthread_mutex_init(&m, &attr); pthread_mutexattr_destroy(&attr)
+#define mutex_lock(m) pthread_mutex_lock(&m)
+#define mutex_unlock(m) pthread_mutex_unlock(&m)
+#define mutex_destroy(m) pthread_mutex_destroy(&m)
+#define thread_type pthread_t
+
+#define event_event int
+#define event_handle struct pollfd
+typedef uint64_t u64_t;
+typedef int64_t  s64_t;
+
+#define pthread_attr_init(attr) (void)attr;
+#define pthread_attr_destroy(attr) (void)attr;
+
+#define last_error() errno
+
+#endif
+
 #if !defined(MSG_NOSIGNAL)
 #define MSG_NOSIGNAL 0
 #endif
@@ -354,7 +425,19 @@ typedef int sockfd;
 #define wake_signal(e) write(e.fds[1], ".", 1)
 #define wake_clear(e) char c[10]; read(e, &c, 10)
 #define wake_close(e) close(e.fds[0]); close(e.fds[1])
-struct wake { 
+struct wake {
+	int fds[2];
+};
+#endif
+
+#if SOCKETPIPE
+#define event_handle struct pollfd
+#define event_event struct wake
+#define wake_create(e) e.fds[0] = socket();pipe(e.fds); set_nonblock(e.fds[0]); set_nonblock(e.fds[1])
+#define wake_signal(e) write(e.fds[1], ".", 1)
+#define wake_clear(e) char c[10]; read(e, &c, 10)
+#define wake_close(e) close(e.fds[0]); close(e.fds[1])
+struct wake {
 	int fds[2];
 };
 #endif
@@ -434,6 +517,16 @@ int poll(struct pollfd *fds, unsigned long numfds, int timeout);
 void touch_memory(u8_t *buf, size_t size);
 #endif
 
+#if FREERTOS
+
+#define wake_create(e) e = 0
+#define wake_signal(e) (e = 1)
+#define wake_clear(e) int val; val=0
+
+int poll(struct pollfd *fds, unsigned long numfds, int timeout);
+int poll2(struct pollfd *fds, unsigned long numfds, int timeout);
+
+#endif
 // buffer.c
 struct buffer {
 	u8_t *buf;
@@ -456,7 +549,7 @@ void buf_flush(struct buffer *buf);
 void buf_adjust(struct buffer *buf, size_t mod);
 void _buf_resize(struct buffer *buf, size_t size);
 void buf_init(struct buffer *buf, size_t size);
-void buf_destroy(struct buffer *buf);
+void squeezelite_buf_destroy(struct buffer *buf);
 
 // slimproto.c
 void slimproto(log_level level, char *server, u8_t mac[6], const char *name, const char *namefile, const char *modelname, int maxSampleRate);
@@ -464,7 +557,7 @@ void slimproto_stop(void);
 void wake_controller(void);
 
 // stream.c
-typedef enum { STOPPED = 0, DISCONNECT, STREAMING_WAIT,
+typedef enum { SQZ_STOPPED = 0, DISCONNECT, STREAMING_WAIT,
 			   STREAMING_BUFFERING, STREAMING_FILE, STREAMING_HTTP, SEND_HEADERS, RECV_HEADERS } stream_state;
 typedef enum { DISCONNECT_OK = 0, LOCAL_DISCONNECT = 1, REMOTE_DISCONNECT = 2, UNREACHABLE = 3, TIMEOUT = 4 } disconnect_code;
 
@@ -475,8 +568,8 @@ struct streamstate {
 	size_t header_len;
 	bool sent_headers;
 	bool cont_wait;
-	u64_t bytes;
-	unsigned threshold;
+        u32_t bytes;
+	u32_t threshold;
 	u32_t meta_interval;
 	u32_t meta_next;
 	u32_t meta_left;
@@ -547,7 +640,7 @@ bool resample_init(char *opt);
 #endif
 
 // output.c output_alsa.c output_pa.c output_pack.c
-typedef enum { OUTPUT_OFF = -1, OUTPUT_STOPPED = 0, OUTPUT_BUFFER, OUTPUT_RUNNING, 
+typedef enum { OUTPUT_OFF = -1, OUTPUT_STOPPED = 0, OUTPUT_BUFFER, OUTPUT_RUNNING,
 			   OUTPUT_PAUSE_FRAMES, OUTPUT_SKIP_FRAMES, OUTPUT_START_AT } output_state;
 
 typedef enum { S32_LE, S24_LE, S24_3LE, S16_LE } output_format;
@@ -567,7 +660,7 @@ struct outputstate {
 	unsigned buffer;
 	unsigned period;
 #endif
-	bool  track_started; 
+	bool  track_started;
 #if PORTAUDIO
 	bool  pa_reopen;
 	unsigned latency;

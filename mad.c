@@ -1,4 +1,4 @@
-/* 
+/*
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
@@ -8,7 +8,7 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -90,12 +90,12 @@ extern struct processstate process;
 // based on libmad minimad.c scale
 static inline u32_t scale(mad_fixed_t sample) {
 	sample += (1L << (MAD_F_FRACBITS - 24));
-	
+
 	if (sample >= MAD_F_ONE)
 		sample = MAD_F_ONE - 1;
 	else if (sample < -MAD_F_ONE)
 		sample = -MAD_F_ONE;
-	
+
 	return (s32_t)(sample >> (MAD_F_FRACBITS + 1 - 24)) << 8;
 }
 
@@ -127,7 +127,7 @@ static void _check_lame_header(size_t bytes) {
 		// 2 channels
 		if (!memcmp(ptr + 36, "Xing", 4) || !memcmp(ptr + 36, "Info", 4)) {
 			ptr += 36 + 7;
-		// mono	
+		// mono
 		} else if (!memcmp(ptr + 21, "Xing", 4) || !memcmp(ptr + 21, "Info", 4)) {
 			ptr += 21 + 7;
 		}
@@ -156,7 +156,7 @@ static void _check_lame_header(size_t bytes) {
 		m->skip    = enc_delay + 1152;
 		m->samples = frame_count * 1152 - enc_delay - enc_padding;
 		m->padding = enc_padding;
-		
+
 		LOG_INFO("gapless: skip: %u samples: " FMT_u64 " delay: %u padding: %u", m->skip, m->samples, enc_delay, enc_padding);
 	}
 }
@@ -257,15 +257,15 @@ static decode_state mad_decode(void) {
 		IF_PROCESS(
 			max_frames = process.max_in_frames - process.in_frames;
 		);
-		
+
 		if (m->synth.pcm.length > max_frames) {
 			LOG_WARN("too many samples - dropping samples");
 			m->synth.pcm.length = max_frames;
 		}
-		
+
 		frames = m->synth.pcm.length;
-		iptrl = m->synth.pcm.samples[0];
-		iptrr = m->synth.pcm.samples[ m->synth.pcm.channels - 1 ];
+		iptrl = m->synth.pcm.length;//samples[0];
+		iptrr = m->synth.pcm.length;//samples[ m->synth.pcm.channels - 1 ];
 
 		if (m->skip) {
 			u32_t skip = min(m->skip, frames);
@@ -365,7 +365,7 @@ static bool load_mad() {
 		LOG_INFO("dlerror: %s", dlerror());
 		return false;
 	}
-	
+
 	m->mad_stream_init = dlsym(handle, "mad_stream_init");
 	m->mad_frame_init = dlsym(handle, "mad_frame_init");
 	m->mad_synth_init = dlsym(handle, "mad_synth_init");
@@ -377,7 +377,7 @@ static bool load_mad() {
 	m->mad_stream_errorstr = dlsym(handle, "mad_stream_errorstr");
 
 	if ((err = dlerror()) != NULL) {
-		LOG_INFO("dlerror: %s", err);		
+		LOG_INFO("dlerror: %s", err);
 		return false;
 	}
 
@@ -388,7 +388,7 @@ static bool load_mad() {
 }
 
 struct codec *register_mad(void) {
-	static struct codec ret = { 
+	static struct codec ret = {
 		'm',          // id
 		"mp3",        // types
 		READBUF_SIZE, // min read

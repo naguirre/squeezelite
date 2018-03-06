@@ -1,4 +1,4 @@
-/* 
+/*
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
@@ -8,7 +8,7 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -52,6 +52,8 @@
 #endif
 
 #include <fcntl.h>
+
+extern log_level loglevel;
 
 // logging functions
 const char *logtime(void) {
@@ -237,9 +239,9 @@ void get_mac(u8_t mac[]) {
 	struct ifaddrs *addrs, *ptr;
 	const struct sockaddr_dl *dlAddr;
 	const unsigned char *base;
-	
+
 	mac[0] = mac[1] = mac[2] = mac[3] = mac[4] = mac[5] = 0;
-	
+
 	if (getifaddrs(&addrs) == 0) {
 		ptr = addrs;
 		while (ptr) {
@@ -262,7 +264,7 @@ void get_mac(u8_t mac[]) {
 	IP_ADAPTER_INFO AdapterInfo[16];
 	DWORD dwBufLen = sizeof(AdapterInfo);
 	DWORD dwStatus = GetAdaptersInfo(AdapterInfo, &dwBufLen);
-	
+
 	mac[0] = mac[1] = mac[2] = mac[3] = mac[4] = mac[5] = 0;
 
 	if (GetAdaptersInfo(AdapterInfo, &dwBufLen) == ERROR_SUCCESS) {
@@ -317,7 +319,7 @@ void server_addr(char *server, in_addr_t *ip_ptr, unsigned *port_ptr) {
 	struct addrinfo *res = NULL;
 	struct addrinfo hints;
 	const char *port = NULL;
-	
+
 	if (strtok(server, ":")) {
 		port = strtok(NULL, ":");
 		if (port) {
@@ -327,13 +329,13 @@ void server_addr(char *server, in_addr_t *ip_ptr, unsigned *port_ptr) {
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_INET;
-	
+
 	getaddrinfo(server, NULL, &hints, &res);
-	
+
 	if (res && res->ai_addr) {
 		*ip_ptr = ((struct sockaddr_in*)res->ai_addr)->sin_addr.s_addr;
-	} 
-	
+	}
+
 	if (res) {
 		freeaddrinfo(res);
 	}
@@ -396,12 +398,12 @@ void packn(u16_t *dest, u16_t val) {
 u32_t unpackN(u32_t *src) {
 	u8_t *ptr = (u8_t *)src;
 	return *(ptr) << 24 | *(ptr+1) << 16 | *(ptr+2) << 8 | *(ptr+3);
-} 
+}
 
 u16_t unpackn(u16_t *src) {
 	u8_t *ptr = (u8_t *)src;
 	return *(ptr) << 8 | *(ptr+1);
-} 
+}
 
 #if OSX
 void set_nosigpipe(sockfd s) {
@@ -451,24 +453,23 @@ int poll(struct pollfd *fds, unsigned long numfds, int timeout) {
 	fd_set r, w;
 	struct timeval tv;
 	int ret;
-	
+
 	FD_ZERO(&r);
 	FD_ZERO(&w);
-	
+
 	if (fds[0].events & POLLIN) FD_SET(fds[0].fd, &r);
 	if (fds[0].events & POLLOUT) FD_SET(fds[0].fd, &w);
-	
+
 	tv.tv_sec = timeout / 1000;
 	tv.tv_usec = 1000 * (timeout % 1000);
-	
-	ret = select(fds[0].fd + 1, &r, &w, NULL, &tv);
 
+	ret = select(fds[0].fd + 1, &r, &w, NULL, &tv);
 	if (ret < 0) return ret;
-	
+
 	fds[0].revents = 0;
 	if (FD_ISSET(fds[0].fd, &r)) fds[0].revents |= POLLIN;
 	if (FD_ISSET(fds[0].fd, &w)) fds[0].revents |= POLLOUT;
-	
+
 	return ret;
 }
 
@@ -481,4 +482,91 @@ void touch_memory(u8_t *buf, size_t size) {
 		*ptr = 0;
 	}
 }
+#endif
+
+#if FREERTOS
+// this only implements numfds == 1
+int poll(struct pollfd *fds, unsigned long numfds, int timeout) {
+        fd_set r, w;
+	struct timeval tv;
+	int ret = -1;
+
+	FD_ZERO(&r);
+        FD_SET(fds[0].fd, &r);
+
+	FD_ZERO(&w);
+        FD_SET(fds[0].fd, &w);
+
+
+	tv.tv_sec = timeout / 1000;
+	tv.tv_usec = 1000 * (timeout % 1000);
+
+	if (fds[0].events & POLLIN)
+	  {
+	    ret = select(fds[0].fd + 1, &r, 0, 0, &tv);
+	  }
+	else if (fds[0].events & POLLOUT)
+	  {
+	    ret = select(fds[0].fd + 1, 0, &w, 0, &tv);
+	  }
+
+
+	if (ret < 0)
+	{
+	  LOG_INFO("Select error %d", ret);
+	}
+	else if (ret > 0)
+	{
+	     fds[0].revents = 0;
+	     if (FD_ISSET(fds[0].fd, &r)) fds[0].revents |= POLLIN;
+	     if (FD_ISSET(fds[0].fd, &w)) fds[0].revents |= POLLOUT;
+	}
+	//	else LOG_INFO("Timeout");
+	return ret;
+}
+
+ int poll2(struct pollfd *fds, unsigned long numfds, int timeout) {
+        fd_set r, w;
+	struct timeval tv;
+	int ret = -1;
+
+	FD_ZERO(&r);
+        FD_SET(fds[0].fd, &r);
+
+	FD_ZERO(&w);
+        FD_SET(fds[0].fd, &w);
+
+
+	tv.tv_sec = timeout / 1000;
+	tv.tv_usec = 1000 * (timeout % 1000);
+
+	if (fds[0].events & POLLIN)
+	  {
+	    ret = select(fds[0].fd + 1, &r, 0, 0, &tv);
+	  }
+	else if (fds[0].events & POLLOUT)
+	  {
+	    ret = select(fds[0].fd + 1, 0, &w, 0, &tv);
+	  }
+
+
+
+
+	if (ret < 0)
+	{
+	  LOG_INFO("Select error %d", ret);
+	}
+	else if (ret > 0)
+	{
+	     LOG_DEBUG("Poll ret : %d\n", ret);
+	     fds[0].revents = 0;
+	     if (FD_ISSET(fds[0].fd, &r)) fds[0].revents |= POLLIN;
+	     if (FD_ISSET(fds[0].fd, &w)) fds[0].revents |= POLLOUT;
+	}
+	else LOG_INFO("Timeout");
+	return ret;
+}
+
+
+
 #endif

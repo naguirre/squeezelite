@@ -1,14 +1,14 @@
-/* 
+/*
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
  *      Ralph Irving 2015-2017, ralph_irving@hotmail.com
- *  
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -163,7 +163,7 @@ static void sendSTAT(const char *event, u32_t server_timestamp) {
 		LOG_SDEBUG("ms_played: 0");
 		ms_played = 0;
 	}
-	
+
 	memset(&pkt, 0, sizeof(struct STAT_packet));
 	memcpy(&pkt.opcode, "STAT", 4);
 	pkt.length = htonl(sizeof(struct STAT_packet) - 8);
@@ -313,7 +313,7 @@ static void process_strm(u8_t *pkt, int len) {
 			unsigned interval = unpackN(&strm->replay_gain);
 			LOCK_O;
 			output.skip_frames = interval * status.current_sample_rate / 1000;
-			output.state = OUTPUT_SKIP_FRAMES;				
+			output.state = OUTPUT_SKIP_FRAMES;
 			UNLOCK_O;
 			LOG_DEBUG("skip ahead interval: %u", interval);
 		}
@@ -341,11 +341,11 @@ static void process_strm(u8_t *pkt, int len) {
 			char *header = (char *)(pkt + sizeof(struct strm_packet));
 			in_addr_t ip = (in_addr_t)strm->server_ip; // keep in network byte order
 			u16_t port = strm->server_port; // keep in network byte order
-			if (ip == 0) ip = slimproto_ip; 
+			if (ip == 0) ip = slimproto_ip;
 
-			LOG_DEBUG("strm s autostart: %c transition period: %u transition type: %u codec: %c", 
+			LOG_DEBUG("\n\nstrm s autostart: %c transition period: %u transition type: %u codec: %c\n\n",
 					  strm->autostart, strm->transition_period, strm->transition_type - '0', strm->format);
-			
+
 			autostart = strm->autostart - '0';
 #if GPIO
 			ampidle = 0;
@@ -437,7 +437,7 @@ static void process_audg(u8_t *pkt, int len) {
 
 	LOG_DEBUG("audg gainL: %u gainR: %u adjust: %u", audg->gainL, audg->gainR, audg->adjust);
 
-	set_volume(audg->adjust ? audg->gainL : FIXED_ONE, audg->adjust ? audg->gainR : FIXED_ONE);
+	//set_volume(audg->adjust ? audg->gainL : FIXED_ONE, audg->adjust ? audg->gainR : FIXED_ONE);
 }
 
 static void process_setd(u8_t *pkt, int len) {
@@ -478,7 +478,7 @@ static void process_serv(u8_t *pkt, int len) {
 
 	unsigned slimproto_port = 0;
 	char squeezeserver[] = SQUEEZENETWORK;
-	
+
 	if(pkt[4] == 0 && pkt[5] == 0 && pkt[6] == 0 && pkt[7] == 1) {
 		server_addr(squeezeserver, &new_server, &slimproto_port);
 	} else {
@@ -499,7 +499,7 @@ static void process_serv(u8_t *pkt, int len) {
 			free(new_server_cap);
 			new_server_cap = NULL;
 		}
-	}		
+	}
 }
 
 struct handler {
@@ -550,7 +550,6 @@ static void slimproto_run() {
 		event_type ev;
 
 		if ((ev = wait_readwake(ehandles, 1000)) != EVENT_TIMEOUT) {
-	
 			if (ev == EVENT_READ) {
 
 				if (expect > 0) {
@@ -661,13 +660,13 @@ static void slimproto_run() {
 			status.stream_size = streambuf->size;
 			status.stream_bytes = stream.bytes;
 			status.stream_state = stream.state;
-						
+
 			if (stream.state == DISCONNECT) {
 				disconnect_code = stream.disconnect;
-				stream.state = STOPPED;
+				stream.state = SQZ_STOPPED;
 				_sendDSCO = true;
 			}
-			if (!stream.sent_headers && 
+			if (!stream.sent_headers &&
 				(stream.state == STREAMING_HTTP || stream.state == STREAMING_WAIT || stream.state == STREAMING_BUFFERING)) {
 				header_len = stream.header_len;
 				memcpy(header, stream.header, header_len);
@@ -683,6 +682,9 @@ static void slimproto_run() {
 			UNLOCK_S;
 
 			LOCK_D;
+
+			LOG_INFO("status.stream_state %d, decode_state %d, sentSTMl %d", status.stream_state, decode.state, sentSTMl);
+			
 			if ((status.stream_state == STREAMING_HTTP || status.stream_state == STREAMING_FILE ||
 				(status.stream_state == DISCONNECT && stream.disconnect == DISCONNECT_OK)) &&
 				!sentSTMl && decode.state == DECODE_READY) {
@@ -706,7 +708,7 @@ static void slimproto_run() {
 			}
 			_decode_state = decode.state;
 			UNLOCK_D;
-			
+
 			LOCK_O;
 			status.output_full = _buf_used(outputbuf);
 			status.output_size = outputbuf->size;
@@ -714,18 +716,18 @@ static void slimproto_run() {
 			status.current_sample_rate = output.current_sample_rate;
 			status.updated = output.updated;
 			status.device_frames = output.device_frames;
-			
+
 			if (output.track_started) {
 				_sendSTMs = true;
 				output.track_started = false;
 				status.stream_start = output.track_start_time;
-#ifdef STATUSHACK 
+#ifdef STATUSHACK
 				status.frames_played = output.frames_played;
 #endif
 			}
 #if PORTAUDIO
 			if (output.pa_reopen) {
-				_pa_open();
+				//_pa_open();
 				output.pa_reopen = false;
 			}
 #endif
@@ -805,13 +807,17 @@ in_addr_t discover_server(char *default_server) {
 	char *buf;
 	struct pollfd pollinfo;
 	unsigned port;
+    int flags = 0;
 
 	int disc_sock = socket(AF_INET, SOCK_DGRAM, 0);
 
 	socklen_t enable = 1;
 	setsockopt(disc_sock, SOL_SOCKET, SO_BROADCAST, (const void *)&enable, sizeof(enable));
 
-	buf = "e";
+    flags = fcntl(disc_sock, F_GETFL, 0);
+    fcntl(disc_sock, F_SETFL, flags|O_NONBLOCK);
+
+    buf = "e";
 
 	memset(&d, 0, sizeof(d));
 	d.sin_family = AF_INET;
@@ -829,13 +835,15 @@ in_addr_t discover_server(char *default_server) {
 		if (sendto(disc_sock, buf, 1, 0, (struct sockaddr *)&d, sizeof(d)) < 0) {
 			LOG_INFO("error sending disovery");
 		}
-
+        LOG_INFO("Poll");
 		if (poll(&pollinfo, 1, 5000) == 1) {
 			char readbuf[10];
 			socklen_t slen = sizeof(s);
 			recvfrom(disc_sock, readbuf, 10, 0, (struct sockaddr *)&s, &slen);
 			LOG_INFO("got response from: %s:%d", inet_ntoa(s.sin_addr), ntohs(s.sin_port));
-		}
+		} else {
+            LOG_INFO("poll return an error");
+        }
 
 		if (default_server) {
 			server_addr(default_server, &s.sin_addr.s_addr, &port);
@@ -904,11 +912,10 @@ void slimproto(log_level level, char *server, u8_t mac[6], const char *name, con
 	}
 
 	if (!running) return;
-
-	LOCK_O;
+    LOCK_O;
 	snprintf(fixed_cap, FIXED_CAP_LEN, ",ModelName=%s,MaxSampleRate=%u", modelname ? modelname : MODEL_NAME_STRING,
 			 ((maxSampleRate > 0) ? maxSampleRate : output.supported_rates[0]));
-	
+
 	for (i = 0; i < MAX_CODECS; i++) {
 		if (codecs[i] && codecs[i]->id && strlen(fixed_cap) < FIXED_CAP_LEN - 10) {
 			strcat(fixed_cap, ",");

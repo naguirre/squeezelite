@@ -1,14 +1,14 @@
-/* 
+/*
  *  Squeezelite - lightweight headless squeezebox emulator
  *
  *  (c) Adrian Smith 2012-2015, triode1@btinternet.com
  *      Ralph Irving 2015-2017, ralph_irving@hotmail.com
- *  
+ *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -95,7 +95,7 @@ static void usage(const char *argv0) {
 			"  -S <Power Script>\tAbsolute path to script to launch on power commands from LMS\n"
 #endif
 #if RESAMPLE
-		   "  -R -u [params]\tResample, params = <recipe>:<flags>:<attenuation>:<precision>:<passband_end>:<stopband_start>:<phase_response>,\n" 
+		   "  -R -u [params]\tResample, params = <recipe>:<flags>:<attenuation>:<precision>:<passband_end>:<stopband_start>:<phase_response>,\n"
 		   "  \t\t\t recipe = (v|h|m|l|q)(L|I|M)(s) [E|X], E = exception - resample only if native rate not supported, X = async - resample to max rate for device, otherwise to max sync rate\n"
 		   "  \t\t\t flags = num in hex,\n"
 		   "  \t\t\t attenuation = attenuation in dB to apply (default is -1db if not explicitly set),\n"
@@ -105,7 +105,7 @@ static void usage(const char *argv0) {
 		   "  \t\t\t phase_response = 0-100 (0 = minimum / 50 = linear / 100 = maximum)\n"
 #endif
 #if DSD
-		   "  -D [delay]\t\tOutput device supports DSD over PCM (DoP), delay = optional delay switching between PCM and DoP in ms\n" 
+		   "  -D [delay]\t\tOutput device supports DSD over PCM (DoP), delay = optional delay switching between PCM and DoP in ms\n"
 #endif
 #if VISEXPORT
 		   "  -v \t\t\tVisualiser support\n"
@@ -206,7 +206,7 @@ static void license(void) {
 		   "GNU General Public License for more details.\n\n"
 		   "You should have received a copy of the GNU General Public License\n"
 		   "along with this program.  If not, see <http://www.gnu.org/licenses/>.\n"
-#if DSD		   
+#if DSD
 		   "\nContains dsd2pcm library Copyright 2009, 2011 Sebastian Gesemann which\n"
 		   "is subject to its own license.\n"
 #endif
@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
 #if IR
 	char *lircrc = NULL;
 #endif
-	
+
 	log_level log_output = lWARN;
 	log_level log_stream = lWARN;
 	log_level log_decode = lWARN;
@@ -308,8 +308,8 @@ int main(int argc, char **argv) {
 #if ALSA
 				   "UVO"
 #endif
-/* 
- * only allow '-Z <rate>' override of maxSampleRate 
+/*
+ * only allow '-Z <rate>' override of maxSampleRate
  * reported by client if built with the capability to resample!
  */
 #if RESAMPLE
@@ -360,7 +360,7 @@ int main(int argc, char **argv) {
 		case 'a':
 			output_params = optarg;
 			break;
-		case 'b': 
+		case 'b':
 			{
 				char *s = next_param(optarg, ':');
 				char *o = next_param(NULL, ':');
@@ -424,7 +424,7 @@ int main(int argc, char **argv) {
 			modelname = optarg;
 			break;
 		case 'r':
-			{ 
+			{
 				char *rstr = next_param(optarg, ':');
 				char *dstr = next_param(NULL, ':');
 				if (rstr && strstr(rstr, ",")) {
@@ -433,7 +433,7 @@ int main(int argc, char **argv) {
 					unsigned tmp[MAX_SUPPORTED_SAMPLERATES] = { 0 };
 					int i, j;
 					int last = 999999;
-					for (i = 0; r && i < MAX_SUPPORTED_SAMPLERATES; ++i) { 
+					for (i = 0; r && i < MAX_SUPPORTED_SAMPLERATES; ++i) {
 						tmp[i] = atoi(r);
 						r = next_param(NULL, ',');
 					}

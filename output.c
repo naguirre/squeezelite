@@ -111,7 +111,7 @@ frames_t _output_frames(frames_t avail) {
 		frames = min(avail, MAX_SILENCE_FRAMES);
 	}
 
-	LOG_SDEBUG("avail: %d frames: %d silence: %d", avail, frames, silence);
+	//LOG_SDEBUG("avail: %d frames: %d silence: %d", avail, frames, silence);
 	frames = min(frames, avail);
 	size = frames;
 	
@@ -271,7 +271,7 @@ frames_t _output_frames(frames_t avail) {
 		}
 	}
 			
-	LOG_SDEBUG("wrote %u frames", frames);
+	//LOG_SDEBUG("wrote %u frames", frames);
 
 	return frames;
 }
@@ -413,7 +413,7 @@ void output_init_common(log_level level, const char *device, unsigned output_buf
 }
 
 void output_close_common(void) {
-	buf_destroy(outputbuf);
+	squeezelite_buf_destroy(outputbuf);
 	free(silencebuf);
 	IF_DSD(
 		free(silencebuf_dop);

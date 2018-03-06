@@ -104,7 +104,7 @@ void buf_init(struct buffer *buf, size_t size) {
 	mutex_create_p(buf->mutex);
 }
 
-void buf_destroy(struct buffer *buf) {
+void squeezelite_buf_destroy(struct buffer *buf) {
 	if (buf->buf) {
 		free(buf->buf);
 		buf->buf = NULL;
